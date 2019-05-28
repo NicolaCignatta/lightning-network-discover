@@ -1,0 +1,32 @@
+type Node {
+    uid: ID!
+    pubKey: String!
+    name: String!
+    channels: [Channel]
+}
+
+type Channel {
+    uid: ID!
+    node1: Node!
+    node2: Node!
+    capacity: Int!
+}
+
+input NewNode {
+    pubKey: String!
+    name: String!
+}
+
+input NewChannel {
+    node1: String!
+    node2: String!
+    capacity: Int!
+}
+
+type Query {
+    nodes: [Node!]!
+}
+
+type Mutation {
+    createNode(input: NewNode!): Node!
+}
