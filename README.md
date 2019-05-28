@@ -1,1 +1,1 @@
-# lightning-network-discover
+# Lightning network discover
