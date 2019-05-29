@@ -3,10 +3,10 @@
 package storm
 
 type Channel struct {
-	UID      string `json:"uid"`
-	Node1    *Node  `json:"node1"`
-	Node2    *Node  `json:"node2"`
-	Capacity int    `json:"capacity"`
+	UID      string `json:"uid,omitempty"`
+	Node1    *Node  `json:"node1,omitempty"`
+	Node2    *Node  `json:"node2,omitempty"`
+	Capacity int    `json:"capacity,omitempty"`
 }
 
 type NewChannel struct {
@@ -21,8 +21,8 @@ type NewNode struct {
 }
 
 type Node struct {
-	UID      string     `json:"uid"`
-	PubKey   string     `json:"pubKey"`
-	Name     string     `json:"name"`
-	Channels []*Channel `json:"channels"`
+	UID      string     `json:"uid,omitempty"`
+	PubKey   string     `json:"pubKey,omitempty"`
+	Name     string     `json:"name,omitempty"`
+	Channels []*Channel `json:"channels,omitempty"`
 }
