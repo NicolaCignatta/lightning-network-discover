@@ -29,4 +29,5 @@ type Query {
 
 type Mutation {
     createNode(input: NewNode!): Node!
+    createChannel(input: NewChannel!): Channel!
 }

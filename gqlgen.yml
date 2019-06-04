@@ -12,3 +12,8 @@ model:
 resolver:
   filename: resolver.go
   type: Resolver
+models:
+  Node:
+    model: github.com/NicolaCignatta/storm/models.Node
+  Channel:
+    model: github.com/NicolaCignatta/storm/models.Channel
