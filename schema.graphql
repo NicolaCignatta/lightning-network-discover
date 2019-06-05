@@ -2,13 +2,12 @@ type Node {
     uid: ID!
     pubKey: String!
     name: String!
-    channels: [Channel]
+    channel: [Channel]!
 }
 
 type Channel {
     uid: ID!
-    node1: Node!
-    node2: Node!
+    node: [Node]!
     capacity: Int!
 }
 
@@ -18,13 +17,17 @@ input NewNode {
 }
 
 input NewChannel {
-    node1: String!
-    node2: String!
+    node: [NewChannelNode!]!
     capacity: Int!
 }
 
+input NewChannelNode {
+    uid: ID!
+}
+
 type Query {
-    nodes: [Node!]!
+    nodes: [Node]!
+    channels: [Channel]!
 }
 
 type Mutation {

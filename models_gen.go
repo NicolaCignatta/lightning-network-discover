@@ -3,9 +3,12 @@
 package storm
 
 type NewChannel struct {
-	Node1    string `json:"node1"`
-	Node2    string `json:"node2"`
-	Capacity int    `json:"capacity"`
+	Node     []*NewChannelNode `json:"node"`
+	Capacity int               `json:"capacity"`
+}
+
+type NewChannelNode struct {
+	UID string `json:"uid"`
 }
 
 type NewNode struct {

@@ -35,9 +35,7 @@ type Config struct {
 }
 
 type ResolverRoot interface {
-	Channel() ChannelResolver
 	Mutation() MutationResolver
-	Node() NodeResolver
 	Query() QueryResolver
 }
 
@@ -47,8 +45,7 @@ type DirectiveRoot struct {
 type ComplexityRoot struct {
 	Channel struct {
 		Capacity func(childComplexity int) int
-		Node1    func(childComplexity int) int
-		Node2    func(childComplexity int) int
+		Node     func(childComplexity int) int
 		UID      func(childComplexity int) int
 	}
 
@@ -58,30 +55,25 @@ type ComplexityRoot struct {
 	}
 
 	Node struct {
-		Channels func(childComplexity int) int
-		Name     func(childComplexity int) int
-		PubKey   func(childComplexity int) int
-		UID      func(childComplexity int) int
+		Channel func(childComplexity int) int
+		Name    func(childComplexity int) int
+		PubKey  func(childComplexity int) int
+		UID     func(childComplexity int) int
 	}
 
 	Query struct {
-		Nodes func(childComplexity int) int
+		Channels func(childComplexity int) int
+		Nodes    func(childComplexity int) int
 	}
 }
 
-type ChannelResolver interface {
-	Node1(ctx context.Context, obj *models.Channel) (*models.Node, error)
-	Node2(ctx context.Context, obj *models.Channel) (*models.Node, error)
-}
 type MutationResolver interface {
 	CreateNode(ctx context.Context, input NewNode) (*models.Node, error)
 	CreateChannel(ctx context.Context, input NewChannel) (*models.Channel, error)
 }
-type NodeResolver interface {
-	Channels(ctx context.Context, obj *models.Node) ([]*models.Channel, error)
-}
 type QueryResolver interface {
 	Nodes(ctx context.Context) ([]*models.Node, error)
+	Channels(ctx context.Context) ([]*models.Channel, error)
 }
 
 type executableSchema struct {
@@ -106,19 +98,12 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Channel.Capacity(childComplexity), true
 
-	case "Channel.node1":
-		if e.complexity.Channel.Node1 == nil {
+	case "Channel.node":
+		if e.complexity.Channel.Node == nil {
 			break
 		}
 
-		return e.complexity.Channel.Node1(childComplexity), true
-
-	case "Channel.node2":
-		if e.complexity.Channel.Node2 == nil {
-			break
-		}
-
-		return e.complexity.Channel.Node2(childComplexity), true
+		return e.complexity.Channel.Node(childComplexity), true
 
 	case "Channel.uid":
 		if e.complexity.Channel.UID == nil {
@@ -151,12 +136,12 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Mutation.CreateNode(childComplexity, args["input"].(NewNode)), true
 
-	case "Node.channels":
-		if e.complexity.Node.Channels == nil {
+	case "Node.channel":
+		if e.complexity.Node.Channel == nil {
 			break
 		}
 
-		return e.complexity.Node.Channels(childComplexity), true
+		return e.complexity.Node.Channel(childComplexity), true
 
 	case "Node.name":
 		if e.complexity.Node.Name == nil {
@@ -178,6 +163,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Node.UID(childComplexity), true
+
+	case "Query.channels":
+		if e.complexity.Query.Channels == nil {
+			break
+		}
+
+		return e.complexity.Query.Channels(childComplexity), true
 
 	case "Query.nodes":
 		if e.complexity.Query.Nodes == nil {
@@ -267,13 +259,12 @@ var parsedSchema = gqlparser.MustLoadSchema(
     uid: ID!
     pubKey: String!
     name: String!
-    channels: [Channel]
+    channel: [Channel]!
 }
 
 type Channel {
     uid: ID!
-    node1: Node!
-    node2: Node!
+    node: [Node]!
     capacity: Int!
 }
 
@@ -283,13 +274,17 @@ input NewNode {
 }
 
 input NewChannel {
-    node1: String!
-    node2: String!
+    node: [NewChannelNode!]!
     capacity: Int!
 }
 
+input NewChannelNode {
+    uid: ID!
+}
+
 type Query {
-    nodes: [Node!]!
+    nodes: [Node]!
+    channels: [Channel]!
 }
 
 type Mutation {
@@ -403,20 +398,20 @@ func (ec *executionContext) _Channel_uid(ctx context.Context, field graphql.Coll
 	return ec.marshalNID2string(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) _Channel_node1(ctx context.Context, field graphql.CollectedField, obj *models.Channel) graphql.Marshaler {
+func (ec *executionContext) _Channel_node(ctx context.Context, field graphql.CollectedField, obj *models.Channel) graphql.Marshaler {
 	ctx = ec.Tracer.StartFieldExecution(ctx, field)
 	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
 	rctx := &graphql.ResolverContext{
 		Object:   "Channel",
 		Field:    field,
 		Args:     nil,
-		IsMethod: true,
+		IsMethod: false,
 	}
 	ctx = graphql.WithResolverContext(ctx, rctx)
 	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
 	resTmp := ec.FieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Channel().Node1(rctx, obj)
+		return obj.Node, nil
 	})
 	if resTmp == nil {
 		if !ec.HasError(rctx) {
@@ -424,37 +419,10 @@ func (ec *executionContext) _Channel_node1(ctx context.Context, field graphql.Co
 		}
 		return graphql.Null
 	}
-	res := resTmp.(*models.Node)
+	res := resTmp.([]*models.Node)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalNNode2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐNode(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) _Channel_node2(ctx context.Context, field graphql.CollectedField, obj *models.Channel) graphql.Marshaler {
-	ctx = ec.Tracer.StartFieldExecution(ctx, field)
-	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
-	rctx := &graphql.ResolverContext{
-		Object:   "Channel",
-		Field:    field,
-		Args:     nil,
-		IsMethod: true,
-	}
-	ctx = graphql.WithResolverContext(ctx, rctx)
-	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
-	resTmp := ec.FieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Channel().Node2(rctx, obj)
-	})
-	if resTmp == nil {
-		if !ec.HasError(rctx) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.(*models.Node)
-	rctx.Result = res
-	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalNNode2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐNode(ctx, field.Selections, res)
+	return ec.marshalNNode2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐNode(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Channel_capacity(ctx context.Context, field graphql.CollectedField, obj *models.Channel) graphql.Marshaler {
@@ -633,28 +601,31 @@ func (ec *executionContext) _Node_name(ctx context.Context, field graphql.Collec
 	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) _Node_channels(ctx context.Context, field graphql.CollectedField, obj *models.Node) graphql.Marshaler {
+func (ec *executionContext) _Node_channel(ctx context.Context, field graphql.CollectedField, obj *models.Node) graphql.Marshaler {
 	ctx = ec.Tracer.StartFieldExecution(ctx, field)
 	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
 	rctx := &graphql.ResolverContext{
 		Object:   "Node",
 		Field:    field,
 		Args:     nil,
-		IsMethod: true,
+		IsMethod: false,
 	}
 	ctx = graphql.WithResolverContext(ctx, rctx)
 	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
 	resTmp := ec.FieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Node().Channels(rctx, obj)
+		return obj.Channel, nil
 	})
 	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return graphql.Null
 	}
 	res := resTmp.([]*models.Channel)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalOChannel2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx, field.Selections, res)
+	return ec.marshalNChannel2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query_nodes(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
@@ -682,6 +653,33 @@ func (ec *executionContext) _Query_nodes(ctx context.Context, field graphql.Coll
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
 	return ec.marshalNNode2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐNode(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_channels(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
+	rctx := &graphql.ResolverContext{
+		Object:   "Query",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec.FieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().Channels(rctx)
+	})
+	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]*models.Channel)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalNChannel2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
@@ -1576,21 +1574,33 @@ func (ec *executionContext) unmarshalInputNewChannel(ctx context.Context, v inte
 
 	for k, v := range asMap {
 		switch k {
-		case "node1":
+		case "node":
 			var err error
-			it.Node1, err = ec.unmarshalNString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-		case "node2":
-			var err error
-			it.Node2, err = ec.unmarshalNString2string(ctx, v)
+			it.Node, err = ec.unmarshalNNewChannelNode2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚐNewChannelNode(ctx, v)
 			if err != nil {
 				return it, err
 			}
 		case "capacity":
 			var err error
 			it.Capacity, err = ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputNewChannelNode(ctx context.Context, v interface{}) (NewChannelNode, error) {
+	var it NewChannelNode
+	var asMap = v.(map[string]interface{})
+
+	for k, v := range asMap {
+		switch k {
+		case "uid":
+			var err error
+			it.UID, err = ec.unmarshalNID2string(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -1646,40 +1656,17 @@ func (ec *executionContext) _Channel(ctx context.Context, sel ast.SelectionSet, 
 		case "uid":
 			out.Values[i] = ec._Channel_uid(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&invalids, 1)
+				invalids++
 			}
-		case "node1":
-			field := field
-			out.Concurrently(i, func() (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Channel_node1(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&invalids, 1)
-				}
-				return res
-			})
-		case "node2":
-			field := field
-			out.Concurrently(i, func() (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Channel_node2(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&invalids, 1)
-				}
-				return res
-			})
+		case "node":
+			out.Values[i] = ec._Channel_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		case "capacity":
 			out.Values[i] = ec._Channel_capacity(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&invalids, 1)
+				invalids++
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
@@ -1742,29 +1729,23 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 		case "uid":
 			out.Values[i] = ec._Node_uid(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&invalids, 1)
+				invalids++
 			}
 		case "pubKey":
 			out.Values[i] = ec._Node_pubKey(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&invalids, 1)
+				invalids++
 			}
 		case "name":
 			out.Values[i] = ec._Node_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&invalids, 1)
+				invalids++
 			}
-		case "channels":
-			field := field
-			out.Concurrently(i, func() (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Node_channels(ctx, field, obj)
-				return res
-			})
+		case "channel":
+			out.Values[i] = ec._Node_channel(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -1800,6 +1781,20 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_nodes(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&invalids, 1)
+				}
+				return res
+			})
+		case "channels":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_channels(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&invalids, 1)
 				}
@@ -2083,6 +2078,43 @@ func (ec *executionContext) marshalNChannel2githubᚗcomᚋNicolaCignattaᚋstor
 	return ec._Channel(ctx, sel, &v)
 }
 
+func (ec *executionContext) marshalNChannel2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx context.Context, sel ast.SelectionSet, v []*models.Channel) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		rctx := &graphql.ResolverContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithResolverContext(ctx, rctx)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalOChannel2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+	return ret
+}
+
 func (ec *executionContext) marshalNChannel2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx context.Context, sel ast.SelectionSet, v *models.Channel) graphql.Marshaler {
 	if v == nil {
 		if !ec.HasError(graphql.GetResolverContext(ctx)) {
@@ -2125,6 +2157,38 @@ func (ec *executionContext) unmarshalNNewChannel2githubᚗcomᚋNicolaCignatta�
 	return ec.unmarshalInputNewChannel(ctx, v)
 }
 
+func (ec *executionContext) unmarshalNNewChannelNode2githubᚗcomᚋNicolaCignattaᚋstormᚐNewChannelNode(ctx context.Context, v interface{}) (NewChannelNode, error) {
+	return ec.unmarshalInputNewChannelNode(ctx, v)
+}
+
+func (ec *executionContext) unmarshalNNewChannelNode2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚐNewChannelNode(ctx context.Context, v interface{}) ([]*NewChannelNode, error) {
+	var vSlice []interface{}
+	if v != nil {
+		if tmp1, ok := v.([]interface{}); ok {
+			vSlice = tmp1
+		} else {
+			vSlice = []interface{}{v}
+		}
+	}
+	var err error
+	res := make([]*NewChannelNode, len(vSlice))
+	for i := range vSlice {
+		res[i], err = ec.unmarshalNNewChannelNode2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚐNewChannelNode(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNNewChannelNode2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚐNewChannelNode(ctx context.Context, v interface{}) (*NewChannelNode, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalNNewChannelNode2githubᚗcomᚋNicolaCignattaᚋstormᚐNewChannelNode(ctx, v)
+	return &res, err
+}
+
 func (ec *executionContext) unmarshalNNewNode2githubᚗcomᚋNicolaCignattaᚋstormᚐNewNode(ctx context.Context, v interface{}) (NewNode, error) {
 	return ec.unmarshalInputNewNode(ctx, v)
 }
@@ -2157,7 +2221,7 @@ func (ec *executionContext) marshalNNode2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋs
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNNode2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐNode(ctx, sel, v[i])
+			ret[i] = ec.marshalONode2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐNode(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -2447,51 +2511,22 @@ func (ec *executionContext) marshalOChannel2githubᚗcomᚋNicolaCignattaᚋstor
 	return ec._Channel(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalOChannel2ᚕᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx context.Context, sel ast.SelectionSet, v []*models.Channel) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		rctx := &graphql.ResolverContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithResolverContext(ctx, rctx)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalOChannel2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-	return ret
-}
-
 func (ec *executionContext) marshalOChannel2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐChannel(ctx context.Context, sel ast.SelectionSet, v *models.Channel) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Channel(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalONode2githubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐNode(ctx context.Context, sel ast.SelectionSet, v models.Node) graphql.Marshaler {
+	return ec._Node(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalONode2ᚖgithubᚗcomᚋNicolaCignattaᚋstormᚋmodelsᚐNode(ctx context.Context, sel ast.SelectionSet, v *models.Node) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Node(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOString2string(ctx context.Context, v interface{}) (string, error) {
