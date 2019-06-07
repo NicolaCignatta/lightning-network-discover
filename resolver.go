@@ -5,7 +5,6 @@ package storm
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/NicolaCignatta/storm/models"
 	"github.com/dgraph-io/dgo"
@@ -22,12 +21,12 @@ func (r *Resolver) Query() QueryResolver {
 	return &queryResolver{r}
 }
 
-// func (r *Resolver) Node() NodeResolver {
-// 	return &nodeResolver{r}
-// }
-// func (r *Resolver) Channel() ChannelResolver {
-// 	return &channelResolver{r}
-// }
+func (r *Resolver) Node() NodeResolver {
+	return &nodeResolver{r}
+}
+func (r *Resolver) Channel() ChannelResolver {
+	return &channelResolver{r}
+}
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
@@ -130,7 +129,9 @@ func (r *mutationResolver) CreateChannel(ctx context.Context, input NewChannel) 
 	q := `query Channel($id: string){
 		channel(func: uid($id)) {
 			uid
-			node
+			node {
+				uid
+			}
 			capacity
 		}
 	}`
@@ -167,7 +168,6 @@ func (r *queryResolver) Nodes(ctx context.Context) ([]*models.Node, error) {
 			pubKey
 			channel: ~node {
 				uid
-				capacity
 			}
 		}
 	}`
@@ -200,8 +200,6 @@ func (r *queryResolver) Channels(ctx context.Context) ([]*models.Channel, error)
 			uid
 			node {
 				uid
-				name
-				pubKey
 			}
 			capacity
 		}
@@ -224,37 +222,15 @@ func (r *queryResolver) Channels(ctx context.Context) ([]*models.Channel, error)
 }
 
 func (r *nodeResolver) Channel(ctx context.Context, obj *models.Node) ([]*models.Channel, error) {
-	c, err := newClient()
-	if err != nil {
-		return nil, err
-	}
-	txn := c.NewReadOnlyTxn()
-
-	var cUIDs []interface{}
-	for _, ch := range obj.Channel {
-		cUIDs = append(cUIDs, ch)
-	}
-	q := fmt.Sprintf(`{
-		channels (func: uid(%s)) {
-			uid
-			capacity
+	var chans []*models.Channel
+	for _, c := range obj.Channel {
+		cc, err := getChannel(ctx, c.UID)
+		if err != nil {
+			return nil, err
 		}
-	}`, cUIDs...)
-
-	resp, err := txn.Query(ctx, q)
-	if err != nil {
-		return nil, err
+		chans = append(chans, cc)
 	}
-
-	var jres struct {
-		Channels []*models.Channel `json:"channels"`
-	}
-
-	if err := json.Unmarshal(resp.GetJson(), &jres); err != nil {
-		return nil, err
-	}
-
-	return jres.Channels, nil
+	return chans, nil
 }
 
 func (r *channelResolver) Node(ctx context.Context, obj *models.Channel) ([]*models.Node, error) {
@@ -278,11 +254,14 @@ func getNode(ctx context.Context, nUID string) (*models.Node, error) {
 	txn := c.NewReadOnlyTxn()
 
 	vars := map[string]string{"$id": nUID}
-	const q = `query Node($id: string){
-		node (func: uid($id)) {
+	const q = `query Nodes($id: string){
+		nodes (func: uid($id)) {
 			uid
 			name
 			pubKey
+			channel: ~node {
+				uid
+			}
 		}
 	}`
 
@@ -292,14 +271,49 @@ func getNode(ctx context.Context, nUID string) (*models.Node, error) {
 	}
 
 	var jres struct {
-		Node *models.Node `json:"node"`
+		Nodes []*models.Node `json:"nodes"`
 	}
 
 	if err := json.Unmarshal(resp.GetJson(), &jres); err != nil {
 		return nil, err
 	}
 
-	return jres.Node, nil
+	return jres.Nodes[0], nil
+}
+
+func getChannel(ctx context.Context, cUID string) (*models.Channel, error) {
+	c, err := newClient()
+	if err != nil {
+		return nil, err
+	}
+
+	txn := c.NewReadOnlyTxn()
+
+	vars := map[string]string{"$id": cUID}
+	const q = `query Channels($id: string){
+		channels (func: uid($id)) {
+			uid
+			capacity
+			node {
+				uid
+			}
+		}
+	}`
+
+	resp, err := txn.QueryWithVars(ctx, q, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	var jres struct {
+		Channels []*models.Channel `json:"channels"`
+	}
+
+	if err := json.Unmarshal(resp.GetJson(), &jres); err != nil {
+		return nil, err
+	}
+
+	return jres.Channels[0], nil
 }
 
 func newClient() (*dgo.Dgraph, error) {

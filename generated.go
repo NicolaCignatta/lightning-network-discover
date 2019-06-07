@@ -35,7 +35,9 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	Channel() ChannelResolver
 	Mutation() MutationResolver
+	Node() NodeResolver
 	Query() QueryResolver
 }
 
@@ -67,9 +69,15 @@ type ComplexityRoot struct {
 	}
 }
 
+type ChannelResolver interface {
+	Node(ctx context.Context, obj *models.Channel) ([]*models.Node, error)
+}
 type MutationResolver interface {
 	CreateNode(ctx context.Context, input NewNode) (*models.Node, error)
 	CreateChannel(ctx context.Context, input NewChannel) (*models.Channel, error)
+}
+type NodeResolver interface {
+	Channel(ctx context.Context, obj *models.Node) ([]*models.Channel, error)
 }
 type QueryResolver interface {
 	Nodes(ctx context.Context) ([]*models.Node, error)
@@ -405,13 +413,13 @@ func (ec *executionContext) _Channel_node(ctx context.Context, field graphql.Col
 		Object:   "Channel",
 		Field:    field,
 		Args:     nil,
-		IsMethod: false,
+		IsMethod: true,
 	}
 	ctx = graphql.WithResolverContext(ctx, rctx)
 	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
 	resTmp := ec.FieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Node, nil
+		return ec.resolvers.Channel().Node(rctx, obj)
 	})
 	if resTmp == nil {
 		if !ec.HasError(rctx) {
@@ -608,13 +616,13 @@ func (ec *executionContext) _Node_channel(ctx context.Context, field graphql.Col
 		Object:   "Node",
 		Field:    field,
 		Args:     nil,
-		IsMethod: false,
+		IsMethod: true,
 	}
 	ctx = graphql.WithResolverContext(ctx, rctx)
 	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
 	resTmp := ec.FieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Channel, nil
+		return ec.resolvers.Node().Channel(rctx, obj)
 	})
 	if resTmp == nil {
 		if !ec.HasError(rctx) {
@@ -1656,17 +1664,26 @@ func (ec *executionContext) _Channel(ctx context.Context, sel ast.SelectionSet, 
 		case "uid":
 			out.Values[i] = ec._Channel_uid(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "node":
-			out.Values[i] = ec._Channel_node(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				invalids++
-			}
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Channel_node(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&invalids, 1)
+				}
+				return res
+			})
 		case "capacity":
 			out.Values[i] = ec._Channel_capacity(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
@@ -1729,23 +1746,32 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 		case "uid":
 			out.Values[i] = ec._Node_uid(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "pubKey":
 			out.Values[i] = ec._Node_pubKey(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "name":
 			out.Values[i] = ec._Node_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "channel":
-			out.Values[i] = ec._Node_channel(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				invalids++
-			}
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Node_channel(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&invalids, 1)
+				}
+				return res
+			})
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
