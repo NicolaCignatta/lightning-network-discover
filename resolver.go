@@ -45,7 +45,6 @@ func (r *mutationResolver) CreateNode(ctx context.Context, input NewNode) (*mode
 		Schema: `
 			name: string @index(term) .
 			pubKey: string .
-			~node: uid @count .
 		`,
 	})
 	if err != nil {
@@ -67,31 +66,12 @@ func (r *mutationResolver) CreateNode(ctx context.Context, input NewNode) (*mode
 		return nil, err
 	}
 
-	variables := map[string]string{"$id": assigned.Uids["blank-0"]}
-	q := `query Node($id: string){
-		node(func: uid($id)) {
-			uid
-			pubKey
-			name
-		}
-	}`
-
-	resp, err := c.NewTxn().QueryWithVars(ctx, q, variables)
+	n, err := getNode(ctx, assigned.Uids["blank-0"])
 	if err != nil {
 		return nil, err
 	}
 
-	type Root struct {
-		Node []models.Node `json:"node"`
-	}
-
-	var rt Root
-	err = json.Unmarshal(resp.Json, &rt)
-	if err != nil {
-		return nil, err
-	}
-
-	return &rt.Node[0], nil
+	return n, nil
 }
 
 func (r *mutationResolver) CreateChannel(ctx context.Context, input NewChannel) (*models.Channel, error) {
@@ -125,33 +105,12 @@ func (r *mutationResolver) CreateChannel(ctx context.Context, input NewChannel) 
 		return nil, err
 	}
 
-	variables := map[string]string{"$id": assigned.Uids["blank-0"]}
-	q := `query Channel($id: string){
-		channel(func: uid($id)) {
-			uid
-			node {
-				uid
-			}
-			capacity
-		}
-	}`
-
-	resp, err := c.NewTxn().QueryWithVars(ctx, q, variables)
+	ch, err := getChannel(ctx, assigned.Uids["blank-0"])
 	if err != nil {
 		return nil, err
 	}
 
-	type Root struct {
-		Channel []models.Channel `json:"channel"`
-	}
-
-	var rt Root
-	err = json.Unmarshal(resp.Json, &rt)
-	if err != nil {
-		return nil, err
-	}
-
-	return &rt.Channel[0], nil
+	return ch, nil
 }
 
 func (r *queryResolver) Nodes(ctx context.Context) ([]*models.Node, error) {
@@ -223,6 +182,8 @@ func (r *queryResolver) Channels(ctx context.Context) ([]*models.Channel, error)
 
 func (r *nodeResolver) Channel(ctx context.Context, obj *models.Node) ([]*models.Channel, error) {
 	var chans []*models.Channel
+
+	// Dgraph does not allow to pass muliple UIDs as func variable. Looping.
 	for _, c := range obj.Channel {
 		cc, err := getChannel(ctx, c.UID)
 		if err != nil {
@@ -235,6 +196,8 @@ func (r *nodeResolver) Channel(ctx context.Context, obj *models.Node) ([]*models
 
 func (r *channelResolver) Node(ctx context.Context, obj *models.Channel) ([]*models.Node, error) {
 	var ns []*models.Node
+
+	// Dgraph does not allow to pass muliple UIDs as func variable. Looping.
 	for _, n := range obj.Node {
 		nn, err := getNode(ctx, n.UID)
 		if err != nil {

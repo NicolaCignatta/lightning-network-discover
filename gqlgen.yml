@@ -16,6 +16,4 @@ models:
   Node:
     model: github.com/NicolaCignatta/storm/models.Node
   Channel:
-    model:
-    - github.com/NicolaCignatta/storm/models.Channel
-    - github.com/NicolaCignatta/storm/models.ChannelDG
+    model: github.com/NicolaCignatta/storm/models.Channel

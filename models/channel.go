@@ -7,8 +7,3 @@ type Channel struct {
 	} `json:"node,omitempty"`
 	Capacity int `json:"capacity,omitempty"`
 }
-
-type ChannelDG struct {
-	Channel Channel
-	Node    []*Node `json:"node,omitempty"`
-}
